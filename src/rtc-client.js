@@ -7,12 +7,19 @@ export default class RTCClient {
   constructor () {
     this._client = null;
     this._joined = false;
+    //this._reinit = false;
     this._published = false;
     this._localStream = null;
     this._remoteStreams = [];
     this._params = {};
 
     this._showProfile = false;
+
+    this._client2 = null;
+    this._joined2 = false;
+    this._localStream2 = null;
+    this._uid2 = null;
+
   }
 
   handleEvents() {
@@ -49,11 +56,13 @@ export default class RTCClient {
     this._client.on("stream-subscribed", (evt) => {
       const remoteStream = evt.stream;
       const id = remoteStream.getId();
-      this._remoteStreams.push(remoteStream);
-      addView(id, this._showProfile);
-      remoteStream.play("remote_video_" + id, {fit: "cover"});
-      Toast.info('stream-subscribed remote-uid: ' + id);
-      console.log('stream-subscribed remote-uid: ', id);
+      if (!(id == this._uid2)){
+        this._remoteStreams.push(remoteStream);
+        addView(id, this._showProfile);
+        remoteStream.play("remote_video_" + id, {fit: "cover"});
+        Toast.info('stream-subscribed remote-uid: ' + id);
+        console.log('stream-subscribed remote-uid: ', id);
+      }
     })
     // Occurs when the remote stream is removed; for example, a peer user calls Client.unpublish.
     this._client.on("stream-removed", (evt) => {
@@ -79,6 +88,150 @@ export default class RTCClient {
       Toast.info("onTokenPrivilegeDidExpire")
       console.log("onTokenPrivilegeDidExpire")
     })
+  }
+
+  camera_join(data){
+    console.log("camera_join");
+
+     this._client2 = AgoraRTC.createClient({mode: data.mode, codec: data.codec});   
+     this._params2 = data;
+
+     // init client
+     this._client2.init(data.appID, () => {
+     console.log("init success");
+     this._client2.join(data.token ? data.token : null, data.channel, data.uid ? data.uid : null, (uid) => {
+       this._params2.uid = uid;
+       this._uid2 = uid;
+       Toast.notice("join channel: " + data.channel + " success, uid: " + uid);
+       console.log("join channel: " + data.channel + " success, uid: " + uid);
+       this._joined2 = true;
+    
+       console.log(data.microphoneId);
+       console.log(data.cameraId);
+
+          this._localStream2 = AgoraRTC.createStream({streamID: uid, audio: true, cameraId: data.cameraId, microphoneId: data.microphoneId, video: true, screen: false});
+
+          this._localStream2.setVideoProfile('720p_3');
+          // The user has granted access to the camera and mic.
+          this._localStream2.on("accessAllowed",() => {
+            console.log("accessAllowed");
+          });
+
+          // The user has denied access to the camera and mic.
+          this._localStream2.on("accessDenied", () => {
+            console.log("accessDenied");
+          });
+
+          this._localStream2.init (() => {
+          console.log("getUserMedia successfully");
+          this._localStream2.play("local_stream", {fit: "cover"})
+          this._client2.publish(this._localStream2,  (err) => {
+            console.log("Publish local stream error: " + err);
+          });
+          this._client2.on('stream-published',  (evt) => {
+            console.log("Publish local stream successfully");
+          });
+        }, (err) => {
+          console.log("getUserMedia failed", err);
+        })
+      }, (err) => {
+        Toast.error("client join failed, please open console see more detail")
+        console.error("client join failed", err)
+      })
+    }, (err) => {
+      Toast.error("client init failed, please open console see more detail")
+      console.error(err);
+    });
+
+  }
+
+  camera_leave () {
+    this._client2.leave(() => {
+      // close stream
+      this._localStream2.close();
+      // stop stream
+      this._localStream2.stop();
+      while (this._remoteStreams.length > 0) {
+        const stream = this._remoteStreams.shift();
+        const id = stream.getId()
+        stream.stop();
+        removeView(id);
+      }
+      this._localStream2 = null;
+      this._remoteStreams = [];
+      this._client2 = null;
+      console.log("client2 leaves channel success");
+      Toast.notice("leave success")
+    }, (err) => {
+      console.log("channel leave failed");
+      Toast.error("leave success")
+      console.error(err);
+    })
+  }
+
+  screensharing(data){
+    console.log("screensharing start");
+
+    // create local stream
+    const streamSpec = {
+      streamID: this._params.uid,
+      audio: false,
+      video: false,
+      screen: true,
+      microphoneId: data.microphoneId,
+      cameraId: data.cameraId
+    }
+
+    // Your firefox need use support mediaSource at least
+    if (isFirefox()) {
+      streamSpec.mediaSource = 'window';
+    } else if (!isCompatibleChrome()) {
+      // before chrome 72 need install chrome extensions
+      // You can download screen share plugin here https://chrome.google.com/webstore/detail/agora-web-screensharing/minllpmhdgpndnkomcoccfekfegnlikg
+      streamSpec.extensionId = 'minllpmhdgpndnkomcoccfekfegnlikg';
+    }
+
+    this._localStream = AgoraRTC.createStream(streamSpec);
+
+    // set screen sharing video resolution
+    if (data.screenShareResolution != 'default') {
+      this._localStream.setScreenProfile(data.screenShareResolution);
+      console.log("set screen profile", data.screenShareResolution);
+    }
+
+    // Occurs when sdk emit error 
+    this._localStream.on("error", (evt) => {
+      Toast.error("error", JSON.stringify([evt]))
+    })
+
+    // Occurs when a you stop screen sharing
+    this._localStream.on("stopScreenSharing", (evt) => {
+      this._localStream.stop();
+      this._showProfile = false;
+      Toast.notice("stop screen sharing")
+    })
+
+    // init local stream
+    this._localStream.init(() => {
+      console.log("init local stream success");
+      // play stream with html element id "local_stream"
+      this._localStream.play("local_stream", {fit: "cover"})
+      // run callback
+      resolve();
+    }, (err) =>  {
+      Toast.error("stream init failed, please open console see more detail")
+      console.error("init local stream failed ", err);
+      if (isFirefox()) {
+        console.error('Failed to start screen sharing, maybe firefox not support mediaSource, please upgrade your firefox to latest version')
+        return;
+      }
+      if (!isCompatibleChrome()) {
+        console.error('Failed to start screen sharing, maybe chrome extension was not installed properly, you can get it from https://chrome.google.com/webstore/detail/minllpmhdgpndnkomcoccfekfegnlikg');
+        return;
+      }
+    })
+    console.log("screensharing success");
+    return;
   }
 
   join (data) {
@@ -145,10 +298,10 @@ export default class RTCClient {
             streamID: this._params.uid,
             audio: false,
             video: false,
-            screen: true,
-            microphoneId: data.microphoneId,
-            cameraId: data.cameraId
+            screen: true
           }
+            //microphoneId: data.microphoneId,
+            //cameraId: data.cameraId
 
           // Your firefox need use support mediaSource at least
           if (isFirefox()) {
@@ -178,7 +331,7 @@ export default class RTCClient {
             this._showProfile = false;
             Toast.notice("stop screen sharing")
           })
-    
+
           // init local stream
           this._localStream.init(() => {
             console.log("init local stream success");
@@ -318,5 +471,6 @@ export default class RTCClient {
     this._showProfile = enable;
     this._showProfile ? $(".video-profile").removeClass("hide") : $(".video-profile").addClass("hide")
   }
+
 }
 

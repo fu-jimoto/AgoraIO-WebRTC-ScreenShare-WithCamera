@@ -84,6 +84,24 @@ $(() => {
     rtc.setNetworkQualityAndStreamStats(this.checked);
   });
 
+  $("#camera_join").on("click", function (e) {
+    e.preventDefault();
+    console.log("camera_join")
+    const params = serializeFormData();
+    if (validator(params, fields)) {
+       rtc.camera_join(params);
+    }
+  })
+
+  $("#camera_leave").on("click", function (e) {
+    e.preventDefault();
+    console.log("camera_leave")
+    const params = serializeFormData();
+    if (validator(params, fields)) {
+       rtc.camera_leave();
+    }
+  })
+
   $("#join").on("click", function (e) {
     e.preventDefault();
     console.log("join")
@@ -92,6 +110,15 @@ $(() => {
       rtc.join(params).then(() => {
         rtc.publish();
       })
+    }
+  })
+
+  $("#screensharing").on("click", function (e) {
+    e.preventDefault();
+    console.log("screensharing")
+    const params = serializeFormData();
+    if (validator(params, fields)) {
+      rtc.screensharing(params);
     }
   })
 
