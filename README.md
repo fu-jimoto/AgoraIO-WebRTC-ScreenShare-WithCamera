@@ -1,1 +1,0 @@
-# AgoraIO-WebRTC-ScreenShare-WithCamera
