@@ -1,5 +1,5 @@
-var client = AgoraRTC.createClient({ mode: "rtc", codec: "h264" }); //映像用
-var client2 = AgoraRTC.createClient({ mode: "rtc", codec: "h264" });　//画面共有用
+var client = AgoraRTC.createClient({ mode: "rtc", codec: "h264" });
+var client2 = AgoraRTC.createClient({ mode: "rtc", codec: "h264" });
 
 var localTracks = {
   videoTrack: null,
